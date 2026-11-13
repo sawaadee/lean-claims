@@ -1,0 +1,151 @@
+# File: mutations.toml
+# Purpose: Bugs to plant in the code. `claims mutate` plants each in turn and requires a
+# proof to break and the claim named here to be proved false on the code as mutated: the
+# refutation is a proof of `False` from the claim's statement, compiled with
+# `mutations/prelude.lean` in front of it.
+#
+# Not every refutation here is `by decide`. The renderer writes numbers by a recursion
+# Lean does not unfold by computation, so the refutations that involve a number rewrite
+# with `digitsOf` first.
+# Created: 2026-11-14
+
+[[mutation]]
+layer = "main"
+description = "the parser reads an empty array as null"
+refuted_claim = "parseChars_iff"
+refutation = "Json.noConfusion (Option.some.inj ((parseChars_iff ['[', ']'] (Json.array [])).mpr (by decide) : some Json.null = some (Json.array [])))"
+
+  [[mutation.edit]]
+  file = "MiniJson/Parse.lean"
+  find = "  | _ + 1, .openBracket :: .closeBracket :: rest => some (.array [], rest)"
+  replace = "  | _ + 1, .openBracket :: .closeBracket :: rest => some (.null, rest)"
+
+[[mutation]]
+layer = "main"
+description = "the parser accepts tokens left over after the value"
+refuted_claim = "parseChars_iff"
+refutation = "absurd ((parseChars_iff ['n', 'u', 'l', 'l', ' ', 'n', 'u', 'l', 'l'] Json.null).mp rfl) (by decide)"
+
+  [[mutation.edit]]
+  file = "MiniJson/Parse.lean"
+  find = "  | some (value, []) => some value"
+  replace = "  | some (value, _) => some value"
+
+[[mutation]]
+layer = "main"
+description = "the renderer leaves out the comma between the items of an array"
+refuted_claim = "tokenize_renderChars"
+refutation = "absurd (tokenize_renderChars (Json.array [Json.null, Json.null])) (by decide)"
+
+  [[mutation.edit]]
+  file = "MiniJson/Render.lean"
+  find = "  | item :: others => ',' :: (renderChars item ++ renderAfterFirst others)"
+  replace = "  | item :: others => renderChars item ++ renderAfterFirst others"
+
+[[mutation]]
+layer = "main"
+description = "the renderer writes a number's digits in the reverse order"
+refuted_claim = "tokenize_renderChars"
+refutation = "by have written := tokenize_renderChars (Json.number 12); simp [renderChars, digitsOf, digitChar] at written; revert written; decide"
+
+  [[mutation.edit]]
+  file = "MiniJson/Render.lean"
+  find = "    digitsOf (number / 10) ++ [digitChar (number % 10)]"
+  replace = "    digitChar (number % 10) :: digitsOf (number / 10)"
+
+[[mutation]]
+layer = "main"
+description = "the parser returns the later items of an array in the wrong order"
+refuted_claim = "parseChars_renderChars"
+refutation = "by have readBack : some (Json.array [Json.null, Json.bool false, Json.bool true]) = some (Json.array [Json.null, Json.bool true, Json.bool false]) := parseChars_renderChars (Json.array [Json.null, Json.bool true, Json.bool false]); cases readBack"
+
+  [[mutation.edit]]
+  file = "MiniJson/Parse.lean"
+  find = "      | some (others, afterArray) => some (item :: others, afterArray)"
+  replace = "      | some (others, afterArray) => some (others ++ [item], afterArray)"
+
+[[mutation]]
+layer = "main"
+description = "the renderer writes false as true"
+refuted_claim = "renderChars_injective"
+refutation = "Bool.noConfusion (Json.bool.inj (renderChars_injective (Json.bool true) (Json.bool false) rfl))"
+
+  [[mutation.edit]]
+  file = "MiniJson/Render.lean"
+  find = "  | .bool false => ['f', 'a', 'l', 's', 'e']"
+  replace = "  | .bool false => ['t', 'r', 'u', 'e']"
+
+[[mutation]]
+layer = "main"
+description = "render puts a space in front of the text"
+refuted_claim = "render_toList"
+refutation = "by have written := render_toList Json.null; simp [render, renderChars] at written"
+
+  [[mutation.edit]]
+  file = "MiniJson/Render.lean"
+  find = "  String.ofList (renderChars value)"
+  replace = "  String.ofList (' ' :: renderChars value)"
+
+[[mutation]]
+layer = "main"
+description = "parse reads the string's characters in the reverse order"
+refuted_claim = "parse_eq_parseChars"
+refutation = "by have read := parse_eq_parseChars (String.ofList ['[', ']']); simp only [parse, String.toList_ofList] at read; have impossible : none = some (Json.array []) := read; cases impossible"
+
+  [[mutation.edit]]
+  file = "MiniJson/Parse.lean"
+  find = "  parseChars text.toList"
+  replace = "  parseChars text.toList.reverse"
+
+# This bug is why claim 6 exists. Claims 1 to 5 say nothing of it: claim 1 holds a text to
+# its tokens and the tokenizer decides what the tokens are, so a tokenizer that accepts
+# too much breaks no claim about the parser. Planted before claim 6 was stated, it broke
+# proofs and no claim could be proved false.
+[[mutation]]
+layer = "main"
+description = "the tokenizer accepts a number written with a leading zero"
+refuted_claim = "parseChars_text"
+refutation = "by have stripped := parseChars_text ['0', '1'] (Json.number 1) rfl; simp [renderChars, digitsOf, digitChar, isSpace] at stripped"
+
+  [[mutation.edit]]
+  file = "MiniJson/Tokenize.lean"
+  find = "      if first == '0' && !moreDigits.isEmpty then"
+  replace = "      if first == '9' && !moreDigits.isEmpty then"
+
+# These two are why claim 7 exists. The first could not be refuted by claim 6, which takes
+# the white space out of a text before it compares. The second could not be refuted by
+# any of claims 1 to 6: they say what an accepted text must look like, and none says a
+# text must be accepted.
+[[mutation]]
+layer = "main"
+description = "the tokenizer reads a tab inside the word true"
+refuted_claim = "parseChars_iff_writes"
+refutation = "absurd ((parseChars_iff_writes ['t', 'r', '\\t', 'u', 'e'] (Json.bool true)).mp rfl) (by decide)"
+
+  [[mutation.edit]]
+  file = "MiniJson/Tokenize.lean"
+  find = "  | fuel + 1, 't' :: 'r' :: 'u' :: 'e' :: rest => (tokenizeWith fuel rest).map (Token.trueWord :: ·)"
+  replace = "  | fuel + 1, 't' :: 'r' :: 'u' :: 'e' :: rest => (tokenizeWith fuel rest).map (Token.trueWord :: ·)\n  | fuel + 1, 't' :: 'r' :: '\\t' :: 'u' :: 'e' :: rest => (tokenizeWith fuel rest).map (Token.trueWord :: ·)"
+
+[[mutation]]
+layer = "main"
+description = "the tokenizer takes only the space as white space, and refuses a tab"
+refuted_claim = "parseChars_iff_writes"
+refutation = "by have accepted : none = some Json.null := (parseChars_iff_writes ['\\t', 'n', 'u', 'l', 'l'] Json.null).mpr (by decide); cases accepted"
+
+  [[mutation.edit]]
+  file = "MiniJson/Tokenize.lean"
+  find = "    if isSpace first then"
+  replace = "    if first == ' ' then"
+
+# A change that does not change what the code does. It refutes nothing, and the run
+# reports whether a proof broke all the same.
+[[mutation]]
+layer = "main"
+description = "the tokenizer is given one unit of fuel more than it needs"
+same_behaviour = true
+
+  [[mutation.edit]]
+  file = "MiniJson/Tokenize.lean"
+  find = "  tokenizeWith (text.length + 1) text"
+  replace = "  tokenizeWith (text.length + 2) text"

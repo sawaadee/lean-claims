@@ -1,0 +1,12 @@
+# File: spec.lock
+# Purpose: A hash of the preamble and of every claim of Spec.lean. A claim whose
+# line changes here is a claim whose text changed. Written by `claims lock --update`
+# and not edited by hand.
+# Created: 2026-11-13
+context	47e994a5c917383276a876dfb4627171f65f46833fb5256e670f19e95685e45e
+claim	1	19a741f0f5e8f96041a02d5c3a2fad7ecd913e0f4d0f8fdf598cf0906bd97281	Example.Proofs.clamp_ge_low	The result is never below the lower bound.
+claim	2	b0f87409035a6f378c5ea1bf5651085e741a5c6511a976753a7a4f94bc2e880d	Example.Proofs.clamp_le_high	The result is never above the upper bound, when the range is not empty.
+claim	3	896bad82d09fc37d1e0e98a4591067857e8aec88c1d063e6f156f77265c6c51c	Example.Proofs.clamp_eq_self	A number already in the range is returned unchanged.
+claim	4	51f2716f22b061a7fbad5340c171b94ce6c681881ece05df2135e34a30a251d9	Example.Proofs.clamp_of_below	A number at or below the lower bound becomes the lower bound.
+claim	5	c046374d8e31c8e0bb3a5933cf4d23e5d828acb0c1daca68ec0b6f63790673a4	Example.Proofs.clamp_of_above	A number at or above the upper bound becomes the upper bound, when the range is not empty.
+claim	6	060be80fa7eda4dc3360cdd6ce82212ca0ddbfd67c1a796ae4c4e18b3a24e4e5	Example.Proofs.clamp_of_empty	For an empty range the result is the lower bound.

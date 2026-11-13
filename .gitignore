@@ -1,0 +1,5 @@
+# File: .gitignore
+# Purpose: Keeps build output and interpreter caches out of the repository.
+# Created: 2026-11-13
+.lake/
+__pycache__/

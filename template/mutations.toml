@@ -1,0 +1,98 @@
+# File: mutations.toml
+# Purpose: The bugs the mutation run plants in this project's code, one at a time. Each
+# says which claim it must make false and gives a Lean proof that it does, or is marked
+# as changing the code without changing what it does.
+#
+# A refutation applies a theorem of the spec to a concrete input and derives False:
+# `absurd (the claim at that input) (by decide)` says "the claim says this, and `decide`
+# computes that it is not so".
+# Created: 2026-11-13
+
+[[mutation]]
+layer = "main"
+description = "the bounds are applied in the other order, which differs only for an empty range"
+refuted_claim = "clamp_of_empty"
+refutation = "absurd (clamp_of_empty 10 5 7 (by decide)) (by decide)"
+
+  [[mutation.edit]]
+  file = "Example/Clamp.lean"
+  find = "max low (min high value)"
+  replace = "min high (max low value)"
+
+[[mutation]]
+layer = "main"
+description = "the upper bound raises the input where it should lower it"
+refuted_claim = "clamp_le_high"
+refutation = "absurd (clamp_le_high 5 10 12 (by decide)) (by decide)"
+
+  [[mutation.edit]]
+  file = "Example/Clamp.lean"
+  find = "max low (min high value)"
+  replace = "max low (max high value)"
+
+[[mutation]]
+layer = "main"
+description = "the two bounds are exchanged"
+refuted_claim = "clamp_eq_self"
+refutation = "absurd (clamp_eq_self 5 10 7 (by decide) (by decide)) (by decide)"
+
+  [[mutation.edit]]
+  file = "Example/Clamp.lean"
+  find = "max low (min high value)"
+  replace = "max high (min low value)"
+
+[[mutation]]
+layer = "main"
+description = "the smaller of the lower bound and the input is taken, not the larger"
+refuted_claim = "clamp_ge_low"
+refutation = "absurd (clamp_ge_low 5 10 3) (by decide)"
+
+  [[mutation.edit]]
+  file = "Example/Clamp.lean"
+  find = "max low (min high value)"
+  replace = "min low (min high value)"
+
+[[mutation]]
+layer = "main"
+description = "an input below the range is let through"
+refuted_claim = "clamp_of_below"
+refutation = "absurd (clamp_of_below 5 10 3 (by decide)) (by decide)"
+
+  [[mutation.edit]]
+  file = "Example/Clamp.lean"
+  find = "max low (min high value)"
+  replace = "max (min low value) (min high value)"
+
+[[mutation]]
+layer = "main"
+description = "the result is one short at the upper bound"
+refuted_claim = "clamp_of_above"
+refutation = "absurd (clamp_of_above 5 10 10 (by decide) (by decide)) (by decide)"
+
+  [[mutation.edit]]
+  file = "Example/Clamp.lean"
+  find = "max low (min high value)"
+  replace = "max low (min high (value - 1))"
+
+# With `high` no longer used the build itself refuses the code, because a warning is an
+# error. The run reports it as rejected by the build, apart from the bugs the claims catch.
+[[mutation]]
+layer = "main"
+description = "the result is always the lower bound"
+refuted_claim = "clamp_eq_self"
+refutation = "absurd (clamp_eq_self 5 10 7 (by decide) (by decide)) (by decide)"
+
+  [[mutation.edit]]
+  file = "Example/Clamp.lean"
+  find = "max low (min high value)"
+  replace = "low"
+
+[[mutation]]
+layer = "main"
+description = "the arguments of min are written the other way round"
+same_behaviour = true
+
+  [[mutation.edit]]
+  file = "Example/Clamp.lean"
+  find = "max low (min high value)"
+  replace = "max low (min value high)"

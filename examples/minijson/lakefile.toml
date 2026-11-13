@@ -1,0 +1,30 @@
+# File: lakefile.toml
+# Purpose: Lake package configuration for MiniJson: the library, its
+# proofs as a separate library, and the spec as a third. The test package under tests/
+# holds the checks, so nothing they need reaches a user of the library.
+# Created: 2026-11-14
+
+name = "minijson"
+version = "0.1.0"
+defaultTargets = ["MiniJson", "MiniJsonProofs"]
+
+# A warning fails the build. `sorry` is reported as a warning, so an unfinished proof
+# stops `lake build`.
+[leanOptions]
+warningAsError = true
+
+[[lean_lib]]
+name = "MiniJson"
+
+# `MiniJson.Verify` restates every claim with `recall`; as a root it is compiled by
+# `lake build`, so the ordinary build checks the proofs against the spec's statements.
+[[lean_lib]]
+name = "MiniJsonProofs"
+roots = ["MiniJson.Proofs", "MiniJson.Verify"]
+
+# The challenge module for `lake comparator`: every claim stated with `sorry`. Not a
+# default target and imported by nothing, so its `sorry`s never reach `lake build`.
+[[lean_lib]]
+name = "Spec"
+# The statements are admitted with `sorry` by design, and `sorry` is a warning.
+leanOptions = { warningAsError = false }

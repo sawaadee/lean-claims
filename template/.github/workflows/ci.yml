@@ -1,0 +1,79 @@
+# File: .github/workflows/ci.yml
+# Purpose: Runs this project's checks on GitHub. On every push and pull request it runs
+# `claims verify`: the lock, the generated files, the build, the theorem names, the
+# axioms, the comparison of the proofs with the spec by every kernel, the audit, the
+# trust report, and the project's own checks. Each night, and when started by hand, it
+# runs `claims verify --full`, which also plants every bug of `mutations.toml` and every
+# fault.
+#
+# The lean-claims tools are fetched at the commit the test package pins for the
+# LeanClaims package, so the tools and the package are always the same version. That
+# needs the requirement in `tests/lakefile.toml` to name a git repository and a revision.
+# A requirement by a path on one machine cannot be followed here, and the step that reads
+# it says so.
+# Created: 2026-11-14
+
+name: checks
+
+on:
+  push:
+  pull_request:
+  schedule:
+    # 03:17 UTC every day. Off the hour, when GitHub's scheduled runs are least delayed.
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    name: Every check
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Lean
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://elan.lean-lang.org/elan-init.sh | sh -s -- -y --default-toolchain none
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+
+      # `lake comparator` runs the kernels in a bubblewrap sandbox. Ubuntu 24.04 does not
+      # let an unprivileged process make the user namespace the sandbox needs until this
+      # setting is turned off.
+      - name: Install the sandbox the comparator needs
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes bubblewrap
+          sudo sysctl --write kernel.apparmor_restrict_unprivileged_userns=0
+
+      - name: Fetch the lean-claims tools at the pinned commit
+        run: |
+          python3 -I - <<'PYTHON'
+          import subprocess
+          import sys
+          import tomllib
+          from pathlib import Path
+
+          lakefile = tomllib.loads(Path("tests/lakefile.toml").read_text(encoding="utf-8"))
+          requirement = next((entry for entry in lakefile.get("require", []) if entry.get("name") == "LeanClaims"), None)
+          if requirement is None or "git" not in requirement or "rev" not in requirement:
+              sys.exit("tests/lakefile.toml must require LeanClaims from a git repository at a fixed revision "
+                       "for the checks to run here. Create the project with --leanclaims-git and --leanclaims-rev, "
+                       "or write the two lines `git = ...` and `rev = ...` in place of `path = ...`.")
+          destination = Path.home() / "lean-claims"
+          subprocess.run(["git", "clone", "--quiet", requirement["git"], str(destination)], check=True)
+          subprocess.run(["git", "-C", str(destination), "checkout", "--quiet", requirement["rev"]], check=True)
+          PYTHON
+
+      - name: Build the project and its test package
+        run: lake build && (cd tests && lake build)
+
+      - name: Every check
+        if: github.event_name == 'push' || github.event_name == 'pull_request'
+        run: python3 -I "$HOME/lean-claims/tools/claims.py" verify
+
+      - name: Every check, every planted bug and every planted fault
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+        run: python3 -I "$HOME/lean-claims/tools/claims.py" verify --full

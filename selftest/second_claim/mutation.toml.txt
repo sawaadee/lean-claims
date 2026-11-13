@@ -1,0 +1,11 @@
+
+[[mutation]]
+layer = "main"
+description = "inRange leaves the upper bound itself out of the range"
+refuted_claim = "inRange_iff"
+refutation = "absurd ((inRange_iff 5 10 10).mpr (by decide)) (by decide)"
+
+  [[mutation.edit]]
+  file = "RangeTools/InRange.lean"
+  find = "decide (low ≤ value ∧ value ≤ high)"
+  replace = "decide (low ≤ value ∧ value < high)"

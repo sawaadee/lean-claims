@@ -1,0 +1,4 @@
+# File: .gitignore
+# Purpose: Keeps Lake's build output out of the repository.
+# Created: 2026-11-14
+.lake/

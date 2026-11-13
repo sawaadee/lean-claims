@@ -1,0 +1,94 @@
+# File: .github/workflows/ci.yml
+# Purpose: Runs the checks of lean-claims on GitHub. On every push and pull request it
+# builds everything, runs the unit tests and the tests of the Lean commands, and runs
+# every check on the starter project and on MiniJson. On every push to main, each night,
+# and when started by hand, it runs the whole self-test, which also plants every bug and
+# every fault and builds two projects from scratch.
+#
+# The split is by time: the first job takes a few minutes and the second about fifteen.
+# A branch or a pull request gets the quick answer. Nothing reaches main without the
+# whole self-test having run on it.
+# Created: 2026-11-14
+
+name: checks
+
+on:
+  push:
+  pull_request:
+  schedule:
+    # 03:17 UTC every day. Off the hour, when GitHub's scheduled runs are least delayed.
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  every-push:
+    name: Builds, unit tests and every check
+    if: github.event_name == 'push' || github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Lean
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://elan.lean-lang.org/elan-init.sh | sh -s -- -y --default-toolchain none
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+
+      # `lake comparator` runs the kernels in a bubblewrap sandbox. Ubuntu 24.04 does not
+      # let an unprivileged process make the user namespace the sandbox needs until this
+      # setting is turned off.
+      - name: Install the sandbox the comparator needs
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes bubblewrap
+          sudo sysctl --write kernel.apparmor_restrict_unprivileged_userns=0
+
+      - name: Build the Lean package, the starter project and MiniJson
+        run: |
+          lake build
+          (cd template && lake build && cd tests && lake build)
+          (cd examples/minijson && lake build && cd tests && lake build)
+
+      - name: Unit tests of the tools
+        run: python3 -I selftest/test_tools.py
+
+      - name: File headers, and the commands, paths and links the documents name
+        run: python3 -I selftest/repository.py
+
+      - name: Tests of the Lean commands
+        run: |
+          python3 -I selftest/audit_facts.py
+          python3 -I selftest/surface_facts.py
+
+      - name: Every check on the starter project
+        run: python3 -I tools/claims.py --project template verify
+
+      - name: Every check on MiniJson
+        run: python3 -I tools/claims.py --project examples/minijson verify
+
+  whole-self-test:
+    name: The whole self-test
+    if: >-
+      github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Lean
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://elan.lean-lang.org/elan-init.sh | sh -s -- -y --default-toolchain none
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+
+      - name: Install the sandbox the comparator needs
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes bubblewrap
+          sudo sysctl --write kernel.apparmor_restrict_unprivileged_userns=0
+
+      - name: The whole self-test
+        run: python3 -I selftest/run.py

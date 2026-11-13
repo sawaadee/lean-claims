@@ -1,0 +1,64 @@
+# File: faults.toml
+# Purpose: The faults this project plants to show that its checks can fail, beyond the
+# ones lean-claims generates for every project, and the one check that is this project's
+# own. `claims checks` plants each fault in turn, runs the check it names, and requires
+# that check to fail with the given text in its output.
+# Created: 2026-11-14
+
+# The differential test: the compiled parser and renderer against Python's `json` module
+# on several thousand texts.
+[[check]]
+id = "differential"
+command = ["python3", "-I", "tests/differential.py"]
+directory = "."
+
+# The bug the tested entry in `claims.toml` names: the tokenizer's rule against a leading
+# zero looks for the wrong digit, so `01` is read as the number 1.
+[[fault]]
+id = "compiled-tokenizer-accepts-a-leading-zero"
+description = "the tokenizer accepts a number written with a leading zero"
+check = "differential"
+caught_when_output_has = ["mismatch for the text '01': the program says 'ok 1', the answer key says 'refused'"]
+
+  [[fault.edit]]
+  file = "MiniJson/Tokenize.lean"
+  find = "      if first == '0' && !moreDigits.isEmpty then"
+  replace = "      if first == '9' && !moreDigits.isEmpty then"
+
+# A proof changed so that it proves less than the spec states: that a rendered string has
+# as many characters as `renderChars` gives, where the spec says they are the same
+# characters. The spec and the lock are untouched.
+[[fault]]
+id = "weakened-proof-fails-the-build"
+description = "a proof loosened to compare lengths where the spec compares characters, the spec left alone"
+check = "build"
+caught_when_output_has = ["MiniJson/Verify.lean", "Type mismatch"]
+
+  [[fault.edit]]
+  file = "MiniJson/Proofs/Claims.lean"
+  find = "theorem render_toList (value : Json) : (render value).toList = renderChars value := by"
+  replace = "theorem render_toList (value : Json) : (render value).toList.length = (renderChars value).length := by"
+
+[[fault]]
+id = "weakened-proof-fails-the-comparator"
+description = "the same loosened proof, put to the comparator"
+check = "comparator"
+caught_when_output_has = ["theorem statement do not match", "render_toList"]
+
+  [[fault.edit]]
+  file = "MiniJson/Proofs/Claims.lean"
+  find = "theorem render_toList (value : Json) : (render value).toList = renderChars value := by"
+  replace = "theorem render_toList (value : Json) : (render value).toList.length = (renderChars value).length := by"
+
+# An audit theorem credited to a claim it is not about: its line names claim 2, and its
+# property is claim 3's statement.
+[[fault]]
+id = "audit-theorem-credited-to-another-claim"
+description = "the theorem failing claim 3 credited to claim 2 in its Audit line"
+check = "audit"
+caught_when_output_has = ["keepsFirstItemOnly_fails_claim3", "the Audit line names claim 2 and Lean does not confirm it", "is the statement of MiniJson.Proofs.parseChars_renderChars, of claim 3"]
+
+  [[fault.edit]]
+  file = "tests/JsonAudit.lean"
+  find = "/-- Audit: fails claim 3. A parser"
+  replace = "/-- Audit: fails claim 2. A parser"

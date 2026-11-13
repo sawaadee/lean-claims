@@ -1,0 +1,17 @@
+{
+  "challenge_module": "Spec",
+  "solution_module": "Example.Proofs",
+  "theorem_names": [
+    "Example.Proofs.clamp_ge_low",
+    "Example.Proofs.clamp_le_high",
+    "Example.Proofs.clamp_eq_self",
+    "Example.Proofs.clamp_of_below",
+    "Example.Proofs.clamp_of_above",
+    "Example.Proofs.clamp_of_empty"
+  ],
+  "permitted_axioms": [
+    "propext",
+    "Classical.choice",
+    "Quot.sound"
+  ]
+}

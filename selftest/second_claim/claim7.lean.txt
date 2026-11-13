@@ -1,0 +1,17 @@
+
+/-! ## Claim 7. `inRange` says exactly whether a number lies in the range.
+
+It answers yes for the numbers from `low` to `high`, both ends included, and no for every
+other number. For an empty range it answers no for every number. -/
+
+namespace RangeTools.Proofs
+
+open RangeTools
+
+/-- There is no hypothesis. The left side is the function's answer being yes, and the
+    right side is the number lying from `low` to `high`. -/
+theorem inRange_iff (low high value : Nat) :
+    inRange low high value = true ↔ low ≤ value ∧ value ≤ high := by
+  sorry
+
+end RangeTools.Proofs

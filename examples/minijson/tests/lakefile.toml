@@ -1,0 +1,31 @@
+# File: tests/lakefile.toml
+# Purpose: The project's test package. It requires the library by path and the
+# LeanClaims package, and nothing in it appears in the dependency graph a user of the
+# library resolves. Its library holds the audit of the claims and the axiom assertion,
+# so building it is passing both. Its program is what the differential test runs.
+# Created: 2026-11-14
+
+name = "minijsontests"
+version = "0.1.0"
+defaultTargets = ["MiniJsonTests"]
+
+[leanOptions]
+warningAsError = true
+
+[[require]]
+name = "minijson"
+path = ".."
+
+[[require]]
+name = "LeanClaims"
+path = "../../.."
+
+[[lean_lib]]
+name = "MiniJsonTests"
+roots = ["JsonAudit", "Axioms"]
+
+# The program the differential test runs: it reads texts, one to a line, and says for
+# each whether it parses and what it renders back as.
+[[lean_exe]]
+name = "jsoncheck"
+root = "JsonCheck"

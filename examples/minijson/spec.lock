@@ -1,0 +1,13 @@
+# File: spec.lock
+# Purpose: A hash of the preamble and of every claim of Spec.lean. A claim whose
+# line changes here is a claim whose text changed. Written by `claims lock --update`
+# and not edited by hand.
+# Created: 2026-11-14
+context	396f3b0ce614b97c076fb18d9239722aee6c35ce9223404ab029cc622b96504c
+claim	1	bff9dacc63a920aafd3b3565c96b9b865d140fb63ae57e882ff3063b88c358c7	MiniJson.Proofs.parseChars_iff	A text parses to a value exactly when the text's tokens are the value's tokens.
+claim	2	4d2463298268e80358da91bfee61b165f8eba54c1718073e5a4eea670f004d40	MiniJson.Proofs.tokenize_renderChars	The text the renderer writes for a value has exactly that value's tokens.
+claim	3	f89794e62e5aaae280c08334e9e66916d5ce42f6342be5ea65e0099a90e187e2	MiniJson.Proofs.parseChars_renderChars,MiniJson.Proofs.parse_render	Parsing the text rendered for a value gives the value back.
+claim	4	c63c79303c4eebde995fa92d29568cc5c2fb2fed420821623840534923831f04	MiniJson.Proofs.renderChars_injective	Two values with the same rendered text are the same value.
+claim	5	7c7c4c0dba28ccfb5af8c8f58f856078b450f23429d8e16d729351031be1d10c	MiniJson.Proofs.parse_eq_parseChars,MiniJson.Proofs.render_toList	The functions on strings are the functions on lists of characters.
+claim	6	82f17913322db659c789be5275bad40e85b840542743a3611342f75491998175	MiniJson.Proofs.parseChars_text	A text that parses to a value is that value's rendered text with white space added.
+claim	7	2dfbc584fdb17eded544f5b1bc12ab160b47d6e0a7ddf50b5b581a3c1b24f697	MiniJson.Proofs.parseChars_iff_writes	A text parses to a value exactly when it is the value's tokens written out.

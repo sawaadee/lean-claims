@@ -1,0 +1,69 @@
+# File: claims.toml
+# Purpose: What the lean-claims tools need to know about this project that is not a
+# claim: its module names, its one layer, the axioms its proofs may rest on, where its
+# test package is, what is tested or trusted and not proved, and what was waived.
+# Created: 2026-11-14
+
+[project]
+name = "MiniJson"
+spec_module = "Spec"
+code_library = "MiniJson"
+proofs_library = "MiniJsonProofs"
+proofs_module = "MiniJson.Proofs"
+verify_file = "MiniJson/Verify.lean"
+allowed_axioms = ["propext", "Classical.choice", "Quot.sound"]
+
+[tests]
+directory = "tests"
+library = "MiniJsonTests"
+
+# The modules of the test package that hold the audit theorems.
+[audit]
+modules = ["JsonAudit"]
+
+# A layer is a set of proof modules that share one namespace.
+[[layer]]
+name = "main"
+namespace = "MiniJson.Proofs"
+proof_files = "MiniJson/Proofs/*.lean"
+# Shared setting for the proofs that a planted bug makes a claim false.
+refutation_prelude = "mutations/prelude.lean"
+
+# What is tested and not proved. Each entry names the check that tests it and the fault in
+# `faults.toml` that the check has been seen to catch. `claims audit` requires both to exist.
+[[tested]]
+what = "The compiled parser and renderer do what their definitions say. The proofs are about the definitions; the compiler that turns them into the code that runs is not verified."
+test = "differential"
+fault = "compiled-tokenizer-accepts-a-leading-zero"
+declarations = ["MiniJson.parse", "MiniJson.render"]
+
+# What is neither proved nor tested, with the reason.
+[[trusted]]
+what = "Python's `json` module, the answer key of the differential test."
+why = "It shares no code with this library. A fault in both that agrees on every text of the test would go unseen."
+
+[[trusted]]
+what = "The equality test and the display form Lean derives for tokens."
+why = "Written by Lean's deriving handlers. The equality test carries its own proof in its type. The display form is used by no function of the library."
+declarations = ["MiniJson.instDecidableEqToken", "MiniJson.instReprToken"]
+
+# A waiver lifts one requirement of `claims audit` for one claim, with the reason.
+[[waiver]]
+claim = 2
+kind = "determines"
+reason = "Many renderers meet it: white space between tokens is free. The claim is meant to leave that open."
+
+[[waiver]]
+claim = 3
+kind = "determines"
+reason = "A consequence of claims 1 and 2. It is stated because it is the property callers rely on."
+
+[[waiver]]
+claim = 4
+kind = "determines"
+reason = "A consequence of claim 3. It is stated because callers compare and index values by their text."
+
+[[waiver]]
+claim = 6
+kind = "determines"
+reason = "A consequence of claim 7, which determines the parser. It is stated because it is the plain form: take the white space out and the rendered text is left."

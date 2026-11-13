@@ -1,0 +1,99 @@
+# File: faults.toml
+# Purpose: The faults this project plants to show that its checks can fail, beyond the
+# ones lean-claims generates for every project. `claims checks` plants each in turn, runs
+# the check it names, and requires that check to fail with the given text in its output.
+#
+# Created: 2026-11-13
+
+# A check of this project's own, beyond the seven every project has: the program that
+# runs the compiled `clamp` on a table of cases.
+[[check]]
+id = "run"
+command = ["lake", "exe", "runclamp"]
+directory = "tests"
+
+# The case the spec-first design exists for: a proof changed so that it proves less than
+# the spec states. The loosened proof still goes through, and its file still compiles.
+# The spec and the lock are untouched, so only the restatement in the build and the
+# comparison through the kernels can show it.
+[[fault]]
+id = "weakened-proof-fails-the-build"
+description = "a proof loosened to allow one above the upper bound, the spec left alone"
+check = "build"
+caught_when_output_has = ["Example/Verify.lean", "Type mismatch"]
+
+  [[fault.edit]]
+  file = "Example/Proofs/Clamp.lean"
+  find = "    clamp low high value ≤ high := by"
+  replace = "    clamp low high value ≤ high + 1 := by"
+
+[[fault]]
+id = "weakened-proof-fails-the-comparator"
+description = "the same loosened proof, put to the comparator"
+check = "comparator"
+caught_when_output_has = ["theorem statement do not match", "clamp_le_high"]
+
+  [[fault.edit]]
+  file = "Example/Proofs/Clamp.lean"
+  find = "    clamp low high value ≤ high := by"
+  replace = "    clamp low high value ≤ high + 1 := by"
+
+# The bug the tested entry in `claims.toml` names. The bounds applied in the other order
+# give the same result for every range that is not empty, so only the case with an empty
+# range shows it.
+[[fault]]
+id = "compiled-clamp-applies-the-bounds-in-the-other-order"
+description = "clamp applies the upper bound last, which differs for an empty range"
+check = "run"
+caught_when_output_has = ["clamp 10 5 7 returned 5, expected 10"]
+
+  [[fault.edit]]
+  file = "Example/Clamp.lean"
+  find = "  max low (min high value)"
+  replace = "  min high (max low value)"
+
+# An audit property that no longer states its claim. The property is loosened by one, the
+# theorem tying it to the claim is proved another way, and the wrong implementation still
+# fails it, so every file compiles and every Audit line reads as before. Only a check
+# that compares the property with the claim's statement can tell.
+[[fault]]
+id = "audit-property-no-longer-states-its-claim"
+description = "the property for claim 1 loosened by one, with its tie proved another way"
+check = "audit"
+caught_when_output_has = ["forgetsLowerBound_fails_claim1", "its property ClampAudit.MeetsClaim1 is not tied to a claim"]
+
+  [[fault.edit]]
+  file = "tests/ClampAudit.lean"
+  find = "  ∀ low high value, low ≤ candidate low high value\n"
+  replace = "  ∀ low high value, low ≤ candidate low high value + 1\n"
+
+  [[fault.edit]]
+  file = "tests/ClampAudit.lean"
+  find = "  ⟨Proofs.clamp_ge_low, "
+  replace = "  ⟨fun low high value => Nat.le_succ_of_le (Proofs.clamp_ge_low low high value), "
+
+# An audit theorem credited to a claim it is not about. The theorem is real and proved;
+# its line names claim 2, and its property is claim 3's statement.
+[[fault]]
+id = "audit-theorem-credited-to-another-claim"
+description = "the theorem failing claim 3 credited to claim 2 in its Audit line"
+check = "audit"
+caught_when_output_has = ["alwaysLowerBound_fails_claim3", "the Audit line names claim 2 and Lean does not confirm it", "is the statement of Example.Proofs.clamp_eq_self, of claim 3"]
+
+  [[fault.edit]]
+  file = "tests/ClampAudit.lean"
+  find = "/-- Audit: fails claim 3. A candidate"
+  replace = "/-- Audit: fails claim 2. A candidate"
+
+# A tested entry that lists a declaration the project does not have, as happens when a
+# function is renamed and `claims.toml` is not.
+[[fault]]
+id = "tested-entry-lists-a-declaration-that-is-gone"
+description = "the tested entry lists Example.clampp, which the project does not declare"
+check = "trust"
+caught_when_output_has = ["lists Example.clampp, which is not a public declaration of the project"]
+
+  [[fault.edit]]
+  file = "claims.toml"
+  find = 'declarations = ["Example.clamp"]'
+  replace = 'declarations = ["Example.clampp"]'

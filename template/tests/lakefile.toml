@@ -1,0 +1,32 @@
+# File: tests/lakefile.toml
+# Purpose: The starter project's test package. It requires the library by path and the
+# LeanClaims package, and nothing in it appears in the dependency graph a user of the
+# library resolves. Its library holds the audit of the claims and the axiom assertion,
+# so building it is passing both. Its program runs the compiled code on a table of cases.
+#
+# Inside the lean-claims repository the LeanClaims package is two directories up.
+# `claims new` gives a project started from this one a requirement of its own.
+# Created: 2026-11-13
+
+name = "exampletests"
+version = "0.1.0"
+defaultTargets = ["ExampleTests"]
+
+[leanOptions]
+warningAsError = true
+
+[[require]]
+name = "example"
+path = ".."
+
+[[require]]
+name = "LeanClaims"
+path = "../.."
+
+[[lean_lib]]
+name = "ExampleTests"
+roots = ["ClampAudit", "Axioms"]
+
+[[lean_exe]]
+name = "runclamp"
+root = "RunClamp"

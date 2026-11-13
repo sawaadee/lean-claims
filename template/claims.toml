@@ -1,0 +1,51 @@
+# File: claims.toml
+# Purpose: What the lean-claims tools need to know about this project that is not a
+# claim: its module names, its one layer, the axioms its proofs may rest on, and where
+# its test package is.
+# Created: 2026-11-13
+
+[project]
+name = "Example"
+spec_module = "Spec"
+code_library = "Example"
+proofs_library = "ExampleProofs"
+proofs_module = "Example.Proofs"
+verify_file = "Example/Verify.lean"
+allowed_axioms = ["propext", "Classical.choice", "Quot.sound"]
+
+[tests]
+directory = "tests"
+library = "ExampleTests"
+
+# The modules of the test package that hold the audit theorems.
+[audit]
+modules = ["ClampAudit"]
+
+# A layer is a set of proof modules that share one namespace.
+[[layer]]
+name = "main"
+namespace = "Example.Proofs"
+proof_files = "Example/Proofs/*.lean"
+# Shared setting for the proofs that a planted bug makes a claim false.
+refutation_prelude = "mutations/prelude.lean"
+
+# What is tested and not proved. Each entry names the check that tests it and the fault in
+# `faults.toml` that the check has been seen to catch. `claims audit` requires both to exist.
+[[tested]]
+what = "The compiled `clamp` computes what its definition says. The proofs are about the definition; the compiler that turns it into the code that runs is not verified."
+test = "run"
+declarations = ["Example.clamp"]
+fault = "compiled-clamp-applies-the-bounds-in-the-other-order"
+
+# A waiver lifts one requirement of `claims audit` for one claim, with the reason. Claims
+# 3 to 6 determine `clamp` between them; claims 1 and 2 follow from those four, so no
+# determination theorem needs them.
+[[waiver]]
+claim = 1
+kind = "determines"
+reason = "A consequence of claims 3 to 6. It is stated because it is the property callers rely on."
+
+[[waiver]]
+claim = 2
+kind = "determines"
+reason = "A consequence of claims 3 to 6. It is stated because it is the property callers rely on."
