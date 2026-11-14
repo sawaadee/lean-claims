@@ -27,10 +27,41 @@
   What this cannot establish: that a mention is a guarantee. A claim may mention a
   function and say little about it. The audit and the mutation run are the checks on
   that.
+
+  Compiled replacements. A `@[csimp]` theorem states `@f = @g` and has the compiler run
+  `g` wherever later code names `f`. What it replaces need not be a public declaration of
+  the project: it can be a private helper, or a function of Lean or of a dependency that
+  the project's code calls. So the command does not ask of each public declaration
+  whether it is replaced. It lists every constant of the project's modules whose
+  statement has that form, with the axioms it depends on beyond the standard ones and
+  whether Lean has it registered as a replacement, everywhere or in a namespace.
+
+  One with that form that is not registered is listed all the same, because
+  `attribute [local csimp]` puts a replacement in force for the rest of a section and
+  Lean keeps no record of it afterwards. Whether that happened cannot be asked, so every
+  statement that could be used that way is reported and `claims trust` judges it by its
+  axioms.
+
+  Hidden code. `@[extern]` and `@[implemented_by]` can be put on a private definition
+  that a public one calls. The public one then runs code the proofs do not reach, and
+  nothing about it says so. So the command also lists, under `hidden`, every definition
+  of the code that is not a public declaration and carries either attribute. Lean puts
+  `@[implemented_by]` on definitions of its own making too: a type with a computed field
+  gets a `casesOn` that runs other code. Such a definition belongs to a public
+  declaration, and is listed with that owner, so that an entry for the owner can account
+  for it. One a person wrote and marked `private` has no owner.
+
+  What the list cannot hold: a replacement declared in a module that neither the code
+  nor the proofs import, such as one in the test package, which changes only what the
+  tests run.
   Created: 2026-11-13
+  Revised: 2026-11-14 (every statement of the project that is or could be a `@[csimp]`
+  replacement, with the axioms behind it; the definitions that are not public and run
+  other code than their definition)
 -/
 
 import Lean
+import LeanClaims.Axioms
 import LeanClaims.Declared
 
 open Lean Elab Command Meta
@@ -129,12 +160,41 @@ def kindOf (info : ConstantInfo) (isInstance : Bool) : String :=
   | .opaqueInfo _ => "opaque"
   | _ => "other"
 
+/-- The name a person wrote for a constant, which for a private one is not the name Lean
+    keeps for it. -/
+def shownName (name : Name) : String :=
+  (if isPrivateName name then privateToUserName name else name).toString
+
+/-- The two constants of a statement `@f = @g`, which is the only form Lean accepts for a
+    `@[csimp]` theorem. Lean also requires the two to take the same universe parameters;
+    that is not asked here, so that nothing Lean would accept is left out. -/
+def constantEquality? (type : Expr) : Option (Name × Name) :=
+  match type.eq? with
+  | some (_, .const replaced _, .const replacement _) => some (replaced, replacement)
+  | _ => none
+
+/-- Where Lean has a constant registered as a `@[csimp]` replacement: `some none` when it
+    is in force everywhere it is imported, `some (some namespace)` when it is in force
+    where that namespace is open, and `none` when it is not registered. -/
+def registeredReplacement? (environment : Environment) (name : Name) : Option (Option Name) :=
+  if (Compiler.CSimp.ext.getState environment).thmNames.contains name then
+    some none
+  else
+    (Compiler.CSimp.ext.ext.getState environment).scopedEntries.map.fold (init := none)
+      fun found scopeName entries =>
+        if found.isSome then found
+        else if entries.toArray.any (·.thmName == name) then some (some scopeName)
+        else none
+
 /-- `#surface_facts claims [T₁, …] code [P₁, …] proofs [M₁, …]` prints one line,
     `surface-facts {…}`. The code modules are the imported modules whose name starts with
     one of the prefixes `Pᵢ` and is not one of the proof modules `Mᵢ`. The line holds
     every public declaration of the code with its kind, its place, whether what runs for
     it is other than its definition (`@[extern]` or `@[implemented_by]`) and the claim
-    theorems that mention it; for every claim theorem the declarations it mentions; and
+    theorems that mention it; under `replacements`, every constant of the project's
+    modules, public or not, that states two constants are equal, and under `hidden` every
+    definition of the code that is not public and runs other code than its definition, as
+    the header describes; for every claim theorem the declarations it mentions; and
     the vocabulary, every declaration of the code the claims are written in. -/
 elab "#surface_facts " "claims " "[" claimSyntax:ident,* "]" " code " "[" codeSyntax:ident,* "]"
     " proofs " "[" proofSyntax:ident,* "]" : command => do
@@ -153,9 +213,19 @@ elab "#surface_facts " "claims " "[" claimSyntax:ident,* "]" " code " "[" codeSy
     environment
     isCodeModule := fun moduleName => codePrefixes.any (·.isPrefixOf moduleName) && !proofModules.contains moduleName }
 
+  let inProject (name : Name) : Bool :=
+    match environment.getModuleIdxFor? name with
+    | some moduleIndex => codePrefixes.any (·.isPrefixOf environment.header.moduleNames[moduleIndex.toNat]!)
+    | none => false
   let mut instanceNames : NameSet := {}
   let mut surface : Array (Name × ConstantInfo) := #[]
+  let mut replacementStatements : Array (Name × Name × Name) := #[]
   for (name, info) in environment.constants.map₁.toList do
+    -- Proof modules are searched as well as code: a replacement declared among the proofs
+    -- is in force for whatever imports them.
+    if inProject name then
+      if let some (replaced, replacement) := constantEquality? info.type then
+        replacementStatements := replacementStatements.push (name, replaced, replacement)
     unless context.inCode name do continue
     if ← liftCoreM <| Meta.isInstance name then
       instanceNames := instanceNames.insert name
@@ -201,10 +271,40 @@ elab "#surface_facts " "claims " "[" claimSyntax:ident,* "]" " code " "[" codeSy
       ("line", toJson (← lineOf name)), ("kind", Json.str (kindOf info (instanceNames.contains name))),
       ("extern", toJson (isExtern environment name)), ("implemented_by", implementedBy.getD Json.null),
       ("stated_by", namesToJson (statedBy.find? name |>.getD #[]))]
+  -- Definitions outside the surface whose running code is not their definition. An
+  -- opaque constant is left out: the proofs see no definition of it, so they claim nothing
+  -- the code that runs could contradict.
+  let mut hiddenJson : Array Json := #[]
+  let hiddenDefinitions := (environment.constants.map₁.toList.toArray.filterMap fun (name, info) =>
+    if context.inCode name && !surfaceNames.contains name && info matches .defnInfo _ then some name else none)
+  for name in hiddenDefinitions.qsort Name.lt do
+    let implementedBy := Compiler.getImplementedBy? environment name
+    if isExtern environment name || implementedBy.isSome then
+      hiddenJson := hiddenJson.push <| Json.mkObj [
+        ("name", Json.str (shownName name)), ("module", Json.str (moduleNameOf environment name).toString),
+        ("line", toJson (← lineOf name)), ("extern", toJson (isExtern environment name)),
+        ("implemented_by", (implementedBy.map fun implementation => Json.str (shownName implementation)).getD Json.null),
+        ("owner", ((context.ownerOf name).map fun owner => Json.str owner.toString).getD Json.null)]
   let claimsJson := mentionsOf.map fun (claimTheorem, mentioned) =>
     Json.mkObj [("name", Json.str claimTheorem.toString), ("mentions", namesToJson mentioned)]
+  let mut replacementsJson : Array Json := #[]
+  for (name, replaced, replacement) in replacementStatements.qsort fun left right => Name.lt left.1 right.1 do
+    let axioms ← liftCoreM <| collectAxioms name
+    let beyondStandard := (axioms.filter fun usedAxiom => !standardAxioms.contains usedAxiom).qsort Name.lt
+    let registered := registeredReplacement? environment name
+    replacementsJson := replacementsJson.push <| Json.mkObj [
+      ("statement", Json.str (shownName name)), ("statement_is_public", toJson (surfaceNames.contains name)),
+      ("module", Json.str (moduleNameOf environment name).toString), ("line", toJson (← lineOf name)),
+      ("replaced", Json.str (shownName replaced)), ("replaced_is_public", toJson (surfaceNames.contains replaced)),
+      ("replacement", Json.str (shownName replacement)),
+      ("registered", toJson registered.isSome),
+      ("namespace", match registered with
+        | some (some scopeName) => Json.str scopeName.toString
+        | _ => Json.null),
+      ("axioms", Json.arr (beyondStandard.map fun usedAxiom => Json.str (shownName usedAxiom)))]
   let document := Json.mkObj [
     ("surface", Json.arr surfaceJson), ("claims", Json.arr claimsJson), ("vocabulary", namesToJson vocabulary),
+    ("replacements", Json.arr replacementsJson), ("hidden", Json.arr hiddenJson),
     ("private_vocabulary", namesToJson (privateVocabulary.toArray.qsort Name.lt))]
   logInfo m!"surface-facts {document.compress}"
 

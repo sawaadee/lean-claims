@@ -32,6 +32,13 @@ theorem fast_eq (number : Nat) : fast number = number + 1 := rfl
 /-- Mentions `replaced`. -/
 theorem replaced_eq (number : Nat) : replaced number = number + 1 := rfl
 
+/-- Mentions `slow`. -/
+theorem slow_eq (number : Nat) : slow number = number + 1 := rfl
+
+/-- Mentions `swapped`, and is true of its definition. The compiled code returns
+    `number + 2`. -/
+theorem swapped_eq (number : Nat) : swapped number = number + 1 := rfl
+
 /-- Mentions `sealed`. -/
 theorem sealed_eq : sealed = sealed := rfl
 

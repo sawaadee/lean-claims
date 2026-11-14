@@ -64,6 +64,10 @@ definitions of the ones they use. Knowing what the claims mean requires reading 
 | `MiniJson.dropSpaces` | definition | MiniJson/Written.lean:31 |  |  |  | yes |
 | `MiniJson.writes` | definition | MiniJson/Written.lean:38 | 7 |  |  |  |
 
+## Compiled replacements
+
+None. No statement of the project is, or rests on an axiom and could be, a `@[csimp]` replacement.
+
 ## Tested, not proved
 
 | What | Check | Fault it has been seen to catch | Declarations |

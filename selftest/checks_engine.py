@@ -81,7 +81,7 @@ NOTHING_EXPECTED = FAILS_FOR_ANOTHER_REASON.replace('caught_when_output_has = ["
 # (what is tested, catalog text or None for the project's own, exit status required, text the output must hold)
 CASES = [
     ("the starter project's own catalog passes", None, 0,
-     ("23 of 23 planted faults were caught", "byte for byte what it was before the run: True")),
+     ("27 of 27 planted faults were caught", "byte for byte what it was before the run: True")),
     ("a fault its check does not notice is reported", UNNOTICED_FAULT, 1,
      ("MISSED  [build] a doc comment reworded", "the check passed with the fault planted")),
     ("a fault caught for another reason is reported", FAILS_FOR_ANOTHER_REASON, 1,

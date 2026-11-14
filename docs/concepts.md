@@ -3,6 +3,7 @@ File: docs/concepts.md
 Purpose: The ideas behind lean-claims in one short page: what a proof leaves unanswered,
 the spec, the levels of trust, the audit, and planted faults.
 Created: 2026-11-14
+Revised: 2026-11-14 (the limit on claims that restate the code)
 -->
 
 # The ideas
@@ -85,5 +86,22 @@ puts the files back.
 - It does not write claims. Deciding what to promise is the author's work.
 - It does not make a weak claim strong. It shows that it is weak.
 - It does not verify Lean's compiler or runtime. That is why "tested" is a level.
+- It does not tell a claim that states what the code should do from one that restates
+  what the code does.
+
+That last limit matters most. Suppose a function has a bug, and its claim is written by
+copying the function's body: "the result equals this expression", where the expression
+is the code. The proof goes through. Every planted bug breaks the claim, because any
+change to the code breaks the equality. The audit confirms the claim rules things out and
+determines the function. Every check passes, and the bug is still there, because the
+claim says only that the code is the code.
+
+No check here can catch that, and no mechanical check is known to. A passing
+`claims verify` means the code meets its claims. Whether the claims are the right ones
+is for a person to judge by reading `Spec.lean`. The tools keep that reading short: the
+claims are in one file, written by hand, and the lock shows when one changes. A claim
+worth having says something a reader can check against what the function is for, without
+looking at how it is written: a bound, a round trip, an agreement with a simpler
+definition.
 
 Every page under `docs/` ends with what its check cannot do and what it trusts.

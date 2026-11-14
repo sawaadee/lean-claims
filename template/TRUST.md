@@ -41,6 +41,10 @@ definitions of the ones they use. Knowing what the claims mean requires reading 
 |-------------|------|-------|------------------|-----------|---------|------------|
 | `Example.clamp` | definition | Example/Clamp.lean:13 | 1, 2, 3, 4, 5, 6 | run |  |  |
 
+## Compiled replacements
+
+None. No statement of the project is, or rests on an axiom and could be, a `@[csimp]` replacement.
+
 ## Tested, not proved
 
 | What | Check | Fault it has been seen to catch | Declarations |
@@ -68,7 +72,7 @@ tools, which are tested and not proved.
 `claims mutate` plants 8 changes to the code from `mutations.toml`. 7 name a claim: each must break a proof and have that claim proved false, unless the build
 refuses the change. 1 keep the code's behaviour and name none.
 
-`claims checks` plants 6 faults from `faults.toml`, and the faults it
+`claims checks` plants 10 faults from `faults.toml`, and the faults it
 generates for every project. The check each is planted for must catch it.
 
 This file records what would be planted, not the result of a run. Run the two commands for that.

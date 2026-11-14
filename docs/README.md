@@ -28,7 +28,7 @@ catch, and what it trusts.
 | [axioms.md](axioms.md) | the axiom assertion | A proof that rests on `sorry`, `native_decide` or a new axiom |
 | [comparator.md](comparator.md) | `lake comparator` | A proof that does not prove its claim, judged by independent kernels |
 | [audit.md](audit.md) | `claims audit` | A claim that rules nothing out, cannot apply, or leaves the function undetermined |
-| [trust.md](trust.md) | `claims trust` | A public declaration with no guarantee and no note saying so |
+| [trust.md](trust.md) | `claims trust` | A public declaration with no guarantee and no note saying so, and code that runs in place of a definition unaccounted for |
 | [mutate.md](mutate.md) | `claims mutate` | A bug the claims do not rule out |
 | [checks.md](checks.md) | `claims checks` | A check that cannot fail |
 

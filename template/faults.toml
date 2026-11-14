@@ -4,6 +4,7 @@
 # the check it names, and requires that check to fail with the given text in its output.
 #
 # Created: 2026-11-13
+# Revised: 2026-11-14 (three `@[csimp]` replacements that rest on an axiom, and a private helper that runs other code)
 
 # A check of this project's own, beyond the seven every project has: the program that
 # runs the compiled `clamp` on a table of cases.
@@ -97,3 +98,116 @@ caught_when_output_has = ["lists Example.clampp, which is not a public declarati
   file = "claims.toml"
   find = 'declarations = ["Example.clamp"]'
   replace = 'declarations = ["Example.clampp"]'
+
+# Compiled code swapped for other code on the word of an axiom. `@[csimp]` has the
+# compiler run `clampTwin` wherever later code says `clamp`, and the theorem that licenses
+# it is an axiom restated. The twin and the axiom are private, so neither is a public
+# declaration, and every claim still holds of `clamp` as defined. The entry that says the
+# compiled `clamp` is tested is taken away as well: with it in place the replacement is
+# covered by that test, and this fault is for the case where nothing covers it.
+[[fault]]
+id = "compiled-code-replaced-on-the-word-of-an-axiom"
+description = "clamp compiled as another function by a @[csimp] theorem that restates an axiom, with no entry listing clamp"
+check = "trust"
+caught_when_output_has = ["Example.clamp is compiled as Example.clampTwin by the @[csimp] theorem Example.clamp_eq_clampTwin", "which depends on Example.clampTwinIsClamp"]
+
+  [[fault.edit]]
+  file = "Example/Clamp.lean"
+  find = "\nend Example\n"
+  replace = """
+
+private def clampTwin (low high value : Nat) : Nat :=
+  min high (max low value)
+
+private axiom clampTwinIsClamp : @clamp = @clampTwin
+
+@[csimp] theorem clamp_eq_clampTwin : @clamp = @clampTwin := clampTwinIsClamp
+
+end Example
+"""
+
+  [[fault.edit]]
+  file = "claims.toml"
+  find = "declarations = [\"Example.clamp\"]\n"
+  replace = ""
+
+# The same, for a function that is not the project's. `clamp` is not named, no public
+# declaration carries the attribute's effect, and the entry for `clamp` stays where it is:
+# what is replaced is Lean's own `Nat.max`, for whatever is compiled after the theorem.
+[[fault]]
+id = "a-function-from-outside-replaced-on-the-word-of-an-axiom"
+description = "Lean's Nat.max compiled as a function of the project by a @[csimp] theorem that restates an axiom"
+check = "trust"
+caught_when_output_has = ["Nat.max is compiled as Example.sumOfTwo by the @[csimp] theorem Example.max_eq_sumOfTwo", "which depends on Example.maxIsSumOfTwo", "no tested or trusted entry lists Example.max_eq_sumOfTwo"]
+
+  [[fault.edit]]
+  file = "Example/Clamp.lean"
+  find = "\nend Example\n"
+  replace = """
+
+private def sumOfTwo (left right : Nat) : Nat := left + right
+
+private axiom maxIsSumOfTwo : @Nat.max = @sumOfTwo
+
+@[csimp] theorem max_eq_sumOfTwo : @Nat.max = @sumOfTwo := maxIsSumOfTwo
+
+end Example
+"""
+
+# The same replacement of `clamp`, put in force for one section with
+# `attribute [local csimp]`. Lean keeps no record of a local attribute once the section
+# ends, so nothing can be asked about it afterwards. The statement it used is still
+# there, and a statement of that form that rests on an axiom is held to the rule whether
+# or not it is registered.
+[[fault]]
+id = "compiled-code-replaced-for-one-section"
+description = "clamp compiled as another function inside one section by attribute [local csimp], with no entry listing clamp"
+check = "trust"
+caught_when_output_has = ["Example.clamp_eq_clampTwin", "states that Example.clamp and Example.clampTwin are the same function and depends on Example.clampTwinIsClamp", "attribute [local csimp]"]
+
+  [[fault.edit]]
+  file = "Example/Clamp.lean"
+  find = "\nend Example\n"
+  replace = """
+
+private def clampTwin (low high value : Nat) : Nat :=
+  min high (max low value)
+
+private axiom clampTwinIsClamp : @clamp = @clampTwin
+
+theorem clamp_eq_clampTwin : @clamp = @clampTwin := clampTwinIsClamp
+
+section
+attribute [local csimp] clamp_eq_clampTwin
+
+private def clampedToTen (value : Nat) : Nat := clamp 0 10 value
+end
+
+end Example
+"""
+
+  [[fault.edit]]
+  file = "claims.toml"
+  find = "declarations = [\"Example.clamp\"]\n"
+  replace = ""
+
+# Code the proofs do not reach, behind a private helper. Nothing public is touched and no
+# public declaration is added, so the report reads exactly as before: only a check that
+# looks at what is not public can tell.
+[[fault]]
+id = "a-private-helper-runs-other-code-than-its-definition"
+description = "a private helper given @[implemented_by] another function"
+check = "trust"
+caught_when_output_has = ["Example.step", "is not a public declaration and runs other code than its definition (@[implemented_by Example.stepTwin])"]
+
+  [[fault.edit]]
+  file = "Example/Clamp.lean"
+  find = "\nend Example\n"
+  replace = """
+
+private def stepTwin (number : Nat) : Nat := number + 2
+
+@[implemented_by stepTwin] private def step (number : Nat) : Nat := number + 1
+
+end Example
+"""

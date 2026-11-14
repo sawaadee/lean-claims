@@ -61,7 +61,8 @@ Do the steps in this order. Each ends with the check that says it is done.
    theorem it must make false, and a proof of `False` from that theorem on the buggy
    code. Run `claims mutate`.
 5. **Cover what cannot be proved.** If the change adds code with effects, or code marked
-   `@[extern]` or `@[implemented_by]`, add its test, a `[[check]]` and a `[[fault]]` in
+   `@[extern]` or `@[implemented_by]`, or replaced by a `@[csimp]` theorem that rests on an
+   axiom, add its test, a `[[check]]` and a `[[fault]]` in
    `faults.toml`, and a `[[tested]]` entry in `claims.toml` that lists the declarations.
 6. **Write the report.** Run `claims trust`. Every public declaration must be mentioned
    by a claim, be listed as tested or trusted, or be something a mentioned declaration

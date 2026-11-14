@@ -25,7 +25,7 @@ Created: 2026-11-14
 | `tests/Axioms.lean` | The axiom assertion over every proof module and test module of theorems | `claims sync` |
 | `mutations.toml` | Bugs to plant in the code, each with the claim it must make false | A person or an agent |
 | `faults.toml` | The project's own checks, and faults to plant so each is seen to fail | A person or an agent |
-| `TRUST.md` | Every public declaration and its level, the entries and the waivers | `claims trust` |
+| `TRUST.md` | Every public declaration and its level, the compiled replacements, the entries and the waivers | `claims trust` |
 | `AGENTS.md` | The rules and the order of work for adding a guarantee | From the starter |
 | `.github/workflows/ci.yml` | Runs `claims verify` on every push and `claims verify --full` each night | From the starter |
 
@@ -168,10 +168,10 @@ and a fast version has two layers.
 | `tested.what` | What is tested and not proved, in a sentence |
 | `tested.test` | The check that tests it: a built-in check or one declared in `faults.toml` |
 | `tested.fault` | The fault in `faults.toml`, planted for that check, that shows the test can fail |
-| `tested.declarations` | Optional. The public declarations the entry covers, which `claims trust` then counts as tested |
+| `tested.declarations` | Optional. The public declarations the entry covers, which `claims trust` then counts as tested. Listing a declaration also accounts for code that runs in its place: its `@[extern]` or `@[implemented_by]`, a `@[csimp]` statement that replaces it or is itself listed, and what Lean generates for a listed type with a computed field |
 | `trusted.what` | What is neither proved nor tested |
 | `trusted.why` | The reason |
-| `trusted.declarations` | Optional. The public declarations the entry covers |
+| `trusted.declarations` | Optional. The public declarations the entry covers, with the same effect |
 | `waiver.claim` | The number of the claim |
 | `waiver.kind` | The requirement of `claims audit` that is lifted: `fails`, `determines`, `can hold` or `mutation` |
 | `waiver.reason` | Why the requirement cannot be met |

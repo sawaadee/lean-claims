@@ -47,6 +47,7 @@ spec.
 | Would an independent kernel accept it? | `lake comparator`, with six kernels |
 | Does the claim rule anything out? Can its hypotheses hold? Do the claims pin the function down? | The audit: theorems about the claims themselves, which Lean must confirm are what they say they are |
 | Is there a public function with no claim and no note saying so? | The trust report, which puts every public declaration at a level: proved, tested, trusted or supporting |
+| Does other code run in place of a definition the proofs are about? | The trust report, which asks Lean about `@[extern]`, `@[implemented_by]` and `@[csimp]` across the project's code, private definitions included, and fails unless each is proved, tested or trusted |
 | Is there a bug the claims do not rule out? | The mutation run plants bugs and requires a claim to be proved false on each |
 | Can each check fail? | The test of the checks plants, for every check, the fault it exists to catch |
 
@@ -88,7 +89,7 @@ the current directory, or the one named with `--project`.
 | `claims sync` | Enforces the spec's rules and writes the files generated from it |
 | `claims names` | Fails when a theorem name is used twice, or is declared where the tools cannot read it |
 | `claims audit` | Requires every claim to have its audits and a planted bug, or a written waiver |
-| `claims trust` | Requires every public declaration to be at a level, and writes `TRUST.md` |
+| `claims trust` | Requires every public declaration to be at a level and all code that runs in place of a definition to be accounted for, and writes `TRUST.md` |
 | `claims mutate` | Plants every bug of `mutations.toml` |
 | `claims checks` | Plants every fault, generated and from `faults.toml` |
 | `claims config` | Reads and validates `claims.toml` |

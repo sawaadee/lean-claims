@@ -29,6 +29,25 @@ definition (`@[extern]`, `@[implemented_by]`), or that has no definition to prov
 anything about (an axiom, an opaque constant). The claims are about the definition, so
 such a declaration also needs a tested or trusted entry.
 
+A `@[csimp]` theorem also has the compiler run other code than a definition. It states
+`@f = @g`, and the compiler uses `g` wherever later code names `f`. The kernel checks the
+statement, so one that depends on the standard axioms only is proved and the report
+lists it. One that depends on any other axiom shows nothing about the compiled code, and
+needs a tested or trusted entry that lists the replaced declaration or the statement.
+
+`@[extern]` and `@[implemented_by]` can also be put on a private definition that a
+public one calls. An entry can list only a public declaration, so such a definition
+always fails the check: it is made public and listed, or the attribute comes off. Lean
+generates such definitions itself for a type with a computed field. Those belong to the
+type, and the entry that lists the type accounts for them.
+
+What is replaced need not be a public declaration: it can be a private helper, or a
+function of Lean or of a dependency that the project's code calls. So the rule is applied
+to every statement of that form in the project's modules, and not to the public
+declarations one by one. It is applied whether or not Lean has the statement registered
+as a replacement, because `attribute [local csimp]` puts one in force for a section and
+Lean keeps no record of it afterwards.
+
 The report, `TRUST.md`, is written from the spec, `claims.toml`, the catalogs and what
 Lean reports, and from nothing else, so writing it twice gives the same file and
 `claims trust --check` can fail when the committed file is out of date. It holds every
@@ -39,6 +58,9 @@ the mutation and fault catalogs plant.
 What this check cannot do: a mention is not a guarantee. A claim may mention a function
 and say little about it. The audit and the mutation run are the checks on that.
 Created: 2026-11-13
+Revised: 2026-11-14 (compiled replacements: every statement that is or could be a `@[csimp]`
+replacement, and the entry one needs when an axiom is behind it; definitions that are not public
+and run other code than their definition)
 """
 
 import json
@@ -66,6 +88,32 @@ class TrustError(Exception):
 
 
 @dataclass(frozen=True)
+class CompiledReplacement:
+    """A constant of the project that states `@f = @g`, the form of a `@[csimp]` theorem,
+    with which the compiler runs `g` wherever later code names `f`."""
+
+    # The constant that makes the statement: a theorem, or an axiom.
+    statement: str
+    statement_is_public: bool
+    module: str
+    line_number: int
+    replaced: str
+    # Whether what is replaced is a public declaration of the project. It can also be a
+    # private one, or a function from outside the project.
+    replaced_is_public: bool
+    replacement: str
+    # Whether Lean has the statement registered as a replacement where the code and the
+    # proofs are imported. One that is not can still have been put in force with
+    # `attribute [local csimp]`, of which Lean keeps no record.
+    is_registered: bool
+    # The namespace that must be open for a registered replacement to be in force, or
+    # `None` when it is in force everywhere.
+    namespace: str | None
+    # The axioms the statement depends on beyond the standard ones. Empty when it is proved.
+    axioms: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class SurfaceDeclaration:
     """A public declaration of the project's code, as Lean reports it."""
 
@@ -80,6 +128,21 @@ class SurfaceDeclaration:
 
 
 @dataclass(frozen=True)
+class HiddenCode:
+    """A definition of the code that is not a public declaration and whose running code is
+    not its definition."""
+
+    name: str
+    module: str
+    line_number: int
+    is_extern: bool
+    implemented_by: str | None
+    # The public declaration it belongs to, when Lean generated it for one: the `casesOn`
+    # of a type with a computed field. `None` for a definition a person marked private.
+    owner: str | None = None
+
+
+@dataclass(frozen=True)
 class SurfaceFacts:
     """Everything `#surface_facts` reported."""
 
@@ -90,6 +153,18 @@ class SurfaceFacts:
     vocabulary: tuple[str, ...]
     # The private declarations among them, which are not surface and are still read.
     private_vocabulary: tuple[str, ...]
+    # Every statement of the project that is or could be a `@[csimp]` replacement.
+    replacements: tuple[CompiledReplacement, ...] = ()
+    # Every definition that is not public and runs other code than its definition.
+    hidden: tuple[HiddenCode, ...] = ()
+
+
+def _compiled_replacement(entry: dict) -> CompiledReplacement:
+    return CompiledReplacement(
+        statement=entry["statement"], statement_is_public=entry["statement_is_public"], module=entry["module"],
+        line_number=entry["line"], replaced=entry["replaced"], replaced_is_public=entry["replaced_is_public"],
+        replacement=entry["replacement"], is_registered=entry["registered"], namespace=entry["namespace"],
+        axioms=tuple(entry["axioms"]))
 
 
 def parse_surface_facts(output: str) -> SurfaceFacts:
@@ -98,6 +173,14 @@ def parse_surface_facts(output: str) -> SurfaceFacts:
     if found is None:
         raise TrustError(f"Lean did not report the surface:\n{output[-1500:]}")
     document = json.loads(found.group("document"))
+    missing = sorted({"surface", "claims", "vocabulary", "private_vocabulary", "replacements", "hidden"} - set(document))
+    if missing:
+        # The report comes from the LeanClaims package the project's test package requires.
+        # A project that pins an older one gets a report these tools cannot judge.
+        raise TrustError(
+            f"the report of #surface_facts has no {', '.join(missing)}: the LeanClaims package this project "
+            "requires is older than these tools. Require the same version of lean-claims in the test package's "
+            "lakefile as the tools being run, then `lake update LeanClaims` there")
     surface = sorted((SurfaceDeclaration(
         name=entry["name"], module=entry["module"], line_number=entry["line"], kind=entry["kind"],
         is_extern=entry["extern"], implemented_by=entry["implemented_by"], stated_by=tuple(entry["stated_by"]))
@@ -106,7 +189,15 @@ def parse_surface_facts(output: str) -> SurfaceFacts:
         surface=tuple(surface),
         mentions={entry["name"]: tuple(entry["mentions"]) for entry in document["claims"]},
         vocabulary=tuple(document["vocabulary"]),
-        private_vocabulary=tuple(document["private_vocabulary"]))
+        private_vocabulary=tuple(document["private_vocabulary"]),
+        replacements=tuple(sorted((_compiled_replacement(entry) for entry in document["replacements"]),
+                                  key=lambda replacement: (replacement.module, replacement.line_number,
+                                                           replacement.statement))),
+        hidden=tuple(sorted((HiddenCode(name=entry["name"], module=entry["module"], line_number=entry["line"],
+                                        is_extern=entry["extern"], implemented_by=entry["implemented_by"],
+                                        owner=entry["owner"])
+                             for entry in document["hidden"]),
+                            key=lambda declaration: (declaration.module, declaration.line_number, declaration.name))))
 
 
 def proof_modules(config: ProjectConfig) -> list[str]:
@@ -174,7 +265,7 @@ class DeclarationLevel:
         return tuple(found)
 
 
-def _place(declaration: SurfaceDeclaration) -> str:
+def _place(declaration: "SurfaceDeclaration | HiddenCode") -> str:
     return f"{declaration.module.replace('.', '/')}.lean:{declaration.line_number}"
 
 
@@ -221,7 +312,56 @@ def surface_levels(config: ProjectConfig, spec: Spec, facts: SurfaceFacts) -> tu
             problems.append(
                 f"{declaration.name} ({_place(declaration)}) runs other code than its definition ({other_code}), "
                 "which the proofs do not reach, and no tested or trusted entry lists it")
+    listed_names = set(tests_of) | trusted_names
+    for declaration in facts.hidden:
+        other_code = "@[extern]" if declaration.is_extern else f"@[implemented_by {declaration.implemented_by}]"
+        if declaration.owner is None:
+            problems.append(
+                f"{declaration.name} ({_place(declaration)}) is not a public declaration and runs other code than "
+                f"its definition ({other_code}), which the proofs do not reach. An entry can list only a public "
+                "declaration, so nothing can say it is tested or trusted: make it public and list it, or take the "
+                "attribute off")
+        elif declaration.owner not in listed_names:
+            problems.append(
+                f"{declaration.name}, which Lean generated for {declaration.owner} ({_place(declaration)}), runs "
+                f"other code than its definition ({other_code}), as it does for a type with a computed field. The "
+                f"proofs do not reach that code, and no tested or trusted entry lists {declaration.owner}")
+    for replacement in facts.replacements:
+        if replacement.axioms and not replacement_is_listed(replacement, listed_names):
+            problems.append(_unproved_replacement_text(replacement))
     return levels, problems
+
+
+def replacement_is_listed(replacement: CompiledReplacement, listed_names: set[str]) -> bool:
+    """Whether a tested or trusted entry lists the statement or what it replaces. Only a
+    public declaration can be listed, so a private name that reads the same as a public one
+    is not taken for it."""
+    return ((replacement.statement_is_public and replacement.statement in listed_names)
+            or (replacement.replaced_is_public and replacement.replaced in listed_names))
+
+
+def _replacement_place(replacement: CompiledReplacement) -> str:
+    return f"{replacement.module.replace('.', '/')}.lean:{replacement.line_number}"
+
+
+def _unproved_replacement_text(replacement: CompiledReplacement) -> str:
+    """What is wrong with a replacement that rests on an axiom and that no entry lists."""
+    listable = [name for name, is_public in ((replacement.replaced, replacement.replaced_is_public),
+                                             (replacement.statement, replacement.statement_is_public)) if is_public]
+    remedy = (f"no tested or trusted entry lists {' or '.join(listable)}" if listable else
+              f"neither {replacement.replaced} nor {replacement.statement} is a public declaration of the code "
+              "that an entry could list, so the statement has to be proved from the standard axioms, or declared "
+              "public in the code and listed")
+    axioms = ", ".join(replacement.axioms)
+    if replacement.is_registered:
+        where = f" where the namespace {replacement.namespace} is open" if replacement.namespace else ""
+        return (f"{replacement.replaced} is compiled as {replacement.replacement}{where} by the @[csimp] theorem "
+                f"{replacement.statement} ({_replacement_place(replacement)}), which depends on {axioms}: nothing "
+                f"proves the compiled code computes what the definition does, and {remedy}")
+    return (f"{replacement.statement} ({_replacement_place(replacement)}) states that {replacement.replaced} and "
+            f"{replacement.replacement} are the same function and depends on {axioms}. `attribute [local csimp]` "
+            f"can have the compiler run {replacement.replacement} on the strength of such a statement, and Lean "
+            f"keeps no record of that, so it is held to the same rule as a registered one: {remedy}")
 
 
 def _numbers(numbers: tuple[int, ...]) -> str:
@@ -314,11 +454,46 @@ def trust_text(config: ProjectConfig, spec: Spec, facts: SurfaceFacts, levels: l
             notes.append("runs `@[extern]` code")
         if declaration.implemented_by:
             notes.append(f"runs `{declaration.implemented_by}`")
+        for generated in facts.hidden:
+            if generated.owner == declaration.name:
+                short_name = generated.name.removeprefix(declaration.name + ".")
+                notes.append(f"its `{short_name}` runs `@[extern]` code" if generated.is_extern
+                             else f"its `{short_name}` runs `{generated.implemented_by}`")
+        for replacement in facts.replacements:
+            if replacement.is_registered and replacement.replaced_is_public and replacement.replaced == declaration.name:
+                notes.append(f"compiled as `{replacement.replacement}`, see below")
         kind = declaration.kind + (f" ({'; '.join(notes)})" if notes else "")
         lines.append(
             f"| `{declaration.name}` | {kind} | {_place(declaration)} | {_numbers(level.claims)} | "
             f"{', '.join(level.tests)} | {'yes' if level.is_trusted else ''} | "
             f"{'yes' if level.is_supporting else ''} |")
+    # A statement that is proved and not registered changes nothing and is left out.
+    shown_replacements = [replacement for replacement in facts.replacements
+                          if replacement.is_registered or replacement.axioms]
+    lines += ["", "## Compiled replacements", ""]
+    if shown_replacements:
+        lines += [
+            "A `@[csimp]` theorem states that two functions are equal and has the compiler run the second",
+            "wherever later code names the first. One proved from the standard axioms is checked by the",
+            "kernel. One that rests on another axiom is not, and is covered by the entry that lists it.",
+            "",
+            "| Replaced | Compiled as | In force | Stated by | Where | Rests on |",
+            "|----------|-------------|----------|-----------|-------|----------|",
+        ]
+        for replacement in shown_replacements:
+            if not replacement.is_registered:
+                in_force = "not registered; `attribute [local csimp]` could use it"
+            elif replacement.namespace:
+                in_force = f"where `{replacement.namespace}` is open"
+            else:
+                in_force = "everywhere"
+            rests_on = (", ".join(f"`{name}`" for name in replacement.axioms) if replacement.axioms
+                        else "the standard axioms: proved")
+            lines.append(
+                f"| `{replacement.replaced}` | `{replacement.replacement}` | {in_force} | `{replacement.statement}` | "
+                f"{_replacement_place(replacement)} | {rests_on} |")
+    else:
+        lines.append("None. No statement of the project is, or rests on an axiom and could be, a `@[csimp]` replacement.")
     lines += ["", "## Tested, not proved", ""]
     if config.tested:
         lines += ["| What | Check | Fault it has been seen to catch | Declarations |",

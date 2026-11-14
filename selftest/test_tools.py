@@ -14,6 +14,7 @@ Revised: 2026-11-13 (the audit rule)
 Revised: 2026-11-13 (the audit is given what Lean reports, and every Audit line must be confirmed)
 Revised: 2026-11-13 (the levels of the public declarations and the trust report)
 Revised: 2026-11-13 (starting a project, and the order of the checks)
+Revised: 2026-11-14 (`@[csimp]` replacements in the trust report)
 """
 
 import dataclasses
@@ -41,7 +42,7 @@ from leanclaims.names import (LeanDeclaredTheorem, NamesError, find_duplicate_th
                               parse_declared_theorems, reading_differences)
 from leanclaims.spec import SpecError, parse_spec  # noqa: E402
 from leanclaims.sync import axioms_text, comparator_text, verify_text  # noqa: E402
-from leanclaims.trust import (SurfaceDeclaration, SurfaceFacts, TrustError, parse_surface_facts,  # noqa: E402
+from leanclaims.trust import (CompiledReplacement, HiddenCode, SurfaceDeclaration, SurfaceFacts, TrustError, parse_surface_facts,  # noqa: E402
                               surface_levels, trust_text)
 
 VALID_CONFIG = """
@@ -806,6 +807,15 @@ def declaration(name: str, kind: str = "definition", stated_by=(), line_number: 
                               stated_by=tuple(stated_by))
 
 
+def replacement(statement: str, replaced: str, replacement_name: str, **flags) -> CompiledReplacement:
+    return CompiledReplacement(
+        statement=f"Example.{statement}", statement_is_public=flags.get("statement_is_public", True),
+        module="Example.Code", line_number=9, replaced=replaced,
+        replaced_is_public=flags.get("replaced_is_public", True), replacement=replacement_name,
+        is_registered=flags.get("is_registered", True), namespace=flags.get("namespace"),
+        axioms=flags.get("axioms", ()))
+
+
 class TrustTests(unittest.TestCase):
     """VALID_SPEC has claim 1 with the theorem `first` and claim 2 with `second` and `third`."""
 
@@ -815,11 +825,12 @@ class TrustTests(unittest.TestCase):
         '\n[[trusted]]\nwhat = "the random source"\nwhy = "Part of the operating system."\n'
         'declarations = ["Example.randomBytes"]\n')
 
-    def levels(self, surface, extra_config: str = ""):
+    def levels(self, surface, extra_config: str = "", replacements=(), hidden=()):
         with tempfile.TemporaryDirectory() as temporary:
             config = load_config(make_project(Path(temporary), VALID_CONFIG + extra_config))
             facts = SurfaceFacts(surface=tuple(surface), mentions={FIRST: ("Example.stated",)},
-                                 vocabulary=("Example.stated",), private_vocabulary=())
+                                 vocabulary=("Example.stated",), private_vocabulary=(),
+                                 replacements=tuple(replacements), hidden=tuple(hidden))
             spec = parse_spec(VALID_SPEC, "Spec.lean")
             levels, problems = surface_levels(config, spec, facts)
             return config, spec, facts, levels, problems
@@ -868,6 +879,95 @@ class TrustTests(unittest.TestCase):
         _, _, _, _, problems = self.levels(surface[:2], self.ENTRIES)
         self.assertEqual(problems, [])
 
+    def test_a_replacement_resting_on_an_axiom_needs_an_entry_whatever_it_replaces(self):
+        surface = [declaration("slow", stated_by=[FIRST]), declaration("randomBytes", stated_by=[FIRST]),
+                   declaration("readClock", stated_by=[FIRST]), declaration("same", kind="theorem")]
+        proved = replacement("slow_eq_quick", "Example.slow", "Example.quick")
+        on_public = replacement("same", "Example.randomBytes", "Example.fastBytes", axioms=("Example.decree",))
+        on_private = replacement("inner_eq", "Example.inner", "Example.other", replaced_is_public=False,
+                                 axioms=("Example.decree",))
+        on_outside = replacement("pred_eq", "Nat.pred", "Example.other", replaced_is_public=False,
+                                 statement_is_public=False, axioms=("Example.decree",))
+        scoped = replacement("scoped_eq", "Example.slow", "Example.other", namespace="Example", axioms=("Example.decree",))
+        unregistered = replacement("local_eq", "Example.slow", "Example.other", is_registered=False,
+                                   axioms=("Example.decree",))
+        unregistered_and_proved = replacement("quick_eq_slow", "Example.quick", "Example.slow", is_registered=False)
+        found = (proved, on_public, on_private, on_outside, scoped, unregistered, unregistered_and_proved)
+        config, spec, facts, levels, problems = self.levels(surface, replacements=found)
+        self.assertEqual(problems, [
+            "Example.randomBytes is compiled as Example.fastBytes by the @[csimp] theorem Example.same "
+            "(Example/Code.lean:9), which depends on Example.decree: nothing proves the compiled code computes what "
+            "the definition does, and no tested or trusted entry lists Example.randomBytes or Example.same",
+            "Example.inner is compiled as Example.other by the @[csimp] theorem Example.inner_eq "
+            "(Example/Code.lean:9), which depends on Example.decree: nothing proves the compiled code computes what "
+            "the definition does, and no tested or trusted entry lists Example.inner_eq",
+            "Nat.pred is compiled as Example.other by the @[csimp] theorem Example.pred_eq (Example/Code.lean:9), "
+            "which depends on Example.decree: nothing proves the compiled code computes what the definition does, "
+            "and neither Nat.pred nor Example.pred_eq is a public declaration of the code that an entry could list, "
+            "so the statement has to be proved from the standard axioms, or declared public in the code and listed",
+            "Example.slow is compiled as Example.other where the namespace Example is open by the @[csimp] theorem "
+            "Example.scoped_eq (Example/Code.lean:9), which depends on Example.decree: nothing proves the compiled "
+            "code computes what the definition does, and no tested or trusted entry lists Example.slow or "
+            "Example.scoped_eq",
+            "Example.local_eq (Example/Code.lean:9) states that Example.slow and Example.other are the same function "
+            "and depends on Example.decree. `attribute [local csimp]` can have the compiler run Example.other on the "
+            "strength of such a statement, and Lean keeps no record of that, so it is held to the same rule as a "
+            "registered one: no tested or trusted entry lists Example.slow or Example.local_eq"])
+        report = trust_text(config, spec, facts, levels, [], [], None)
+        self.assertIn("| `Example.slow` | definition (compiled as `Example.quick`, see below; compiled as "
+                      "`Example.other`, see below) |", report)
+        self.assertIn("| `Example.slow` | `Example.quick` | everywhere | `Example.slow_eq_quick` | Example/Code.lean:9 | "
+                      "the standard axioms: proved |", report)
+        self.assertIn("| `Nat.pred` | `Example.other` | everywhere | `Example.pred_eq` | Example/Code.lean:9 | "
+                      "`Example.decree` |", report)
+        self.assertIn("| `Example.slow` | `Example.other` | where `Example` is open | `Example.scoped_eq` |", report)
+        self.assertIn("| `Example.slow` | `Example.other` | not registered; `attribute [local csimp]` could use it | "
+                      "`Example.local_eq` |", report)
+        self.assertNotIn("quick_eq_slow", report)
+        # ENTRIES lists `readClock` and `randomBytes`. The entry for what is replaced accounts
+        # for the replacement, and so does one for the statement.
+        _, _, _, _, problems = self.levels(surface, self.ENTRIES, replacements=(on_public,))
+        self.assertEqual(problems, [])
+        by_statement = replacement("readClock", "Example.inner", "Example.other", replaced_is_public=False,
+                                   axioms=("Example.decree",))
+        _, _, _, _, problems = self.levels(surface, self.ENTRIES, replacements=(by_statement,))
+        self.assertEqual(problems, [])
+        # A private name that reads like a listed public one is not taken for it.
+        private_twin = replacement("readClock", "Example.randomBytes", "Example.other", replaced_is_public=False,
+                                   statement_is_public=False, axioms=("Example.decree",))
+        _, _, _, _, problems = self.levels(surface, self.ENTRIES, replacements=(private_twin,))
+        self.assertEqual(len(problems), 1)
+
+    def test_a_private_definition_that_runs_other_code_is_always_a_problem(self):
+        hidden = (HiddenCode("Example.inner", "Example.Code", 4, True, None),
+                  HiddenCode("Example.step", "Example.Code", 6, False, "Example.stepTwin"))
+        _, _, _, _, problems = self.levels([declaration("stated", stated_by=[FIRST])], hidden=hidden)
+        self.assertEqual(len(problems), 2)
+        self.assertIn("Example.inner (Example/Code.lean:4) is not a public declaration and runs other code than its "
+                      "definition (@[extern])", problems[0])
+        self.assertIn("Example.step (Example/Code.lean:6) is not a public declaration and runs other code than its "
+                      "definition (@[implemented_by Example.stepTwin])", problems[1])
+
+    def test_code_lean_generates_for_a_type_is_accounted_for_by_an_entry_for_the_type(self):
+        generated = (HiddenCode("Example.readClock.casesOn", "Example.Code", 3, False,
+                                "Example.readClock.casesOn._override", owner="Example.readClock"),)
+        surface = [declaration("readClock", kind="type", stated_by=[FIRST]), declaration("randomBytes")]
+        _, _, _, _, problems = self.levels(surface, hidden=generated)
+        self.assertEqual(len(problems), 2)  # and `randomBytes` is at no level without ENTRIES
+        self.assertIn("Example.readClock.casesOn, which Lean generated for Example.readClock (Example/Code.lean:3), "
+                      "runs other code than its definition (@[implemented_by Example.readClock.casesOn._override])",
+                      problems[1])
+        self.assertIn("no tested or trusted entry lists Example.readClock", problems[1])
+        config, spec, facts, levels, problems = self.levels(surface, self.ENTRIES, hidden=generated)
+        self.assertEqual(problems, [])
+        self.assertIn("| `Example.readClock` | type (its `casesOn` runs `Example.readClock.casesOn._override`) |",
+                      trust_text(config, spec, facts, levels, [], [], None))
+
+    def test_a_report_with_no_replacement_says_so(self):
+        config, spec, facts, levels, _ = self.levels([declaration("stated", stated_by=[FIRST])])
+        self.assertIn("## Compiled replacements\n\nNone. No statement of the project is",
+                      trust_text(config, spec, facts, levels, [], [], None))
+
     def test_an_entry_that_lists_a_declaration_the_project_lacks_is_a_problem(self):
         _, _, _, _, problems = self.levels([declaration("stated", stated_by=[FIRST])], self.ENTRIES)
         self.assertEqual(problems, [
@@ -895,13 +995,23 @@ class TrustTests(unittest.TestCase):
 
     def test_the_surface_lean_prints_is_read(self):
         output = ('Probe.lean:4:0: info: surface-facts {"claims":[{"mentions":["A.f"],"name":"A.P.t"}],'
-                  '"private_vocabulary":["A.g"],"surface":[{"extern":true,"implemented_by":null,"kind":"definition",'
+                  '"hidden":[{"extern":false,"implemented_by":"A.k","line":3,"module":"A.B","name":"A.j","owner":null}],'
+                  '"private_vocabulary":["A.g"],"replacements":[{"axioms":["A.a"],"line":9,"module":"A.B","namespace":null,'
+                  '"registered":true,"replaced":"A.f","replaced_is_public":true,"replacement":"A.h","statement":"A.t",'
+                  '"statement_is_public":false}],"surface":[{"extern":true,"implemented_by":null,"kind":"definition",'
                   '"line":7,"module":"A.B","name":"A.f","stated_by":["A.P.t"]}],"vocabulary":["A.f"]}\n')
         facts = parse_surface_facts(output)
         self.assertEqual(facts.surface, (SurfaceDeclaration("A.f", "A.B", 7, "definition", True, None, ("A.P.t",)),))
+        self.assertEqual(facts.replacements, (CompiledReplacement("A.t", False, "A.B", 9, "A.f", True, "A.h", True,
+                                                                  None, ("A.a",)),))
+        self.assertEqual(facts.hidden, (HiddenCode("A.j", "A.B", 3, False, "A.k"),))
         self.assertEqual((facts.mentions, facts.vocabulary, facts.private_vocabulary), ({"A.P.t": ("A.f",)}, ("A.f",), ("A.g",)))
         with self.assertRaisesRegex(TrustError, "did not report"):
             parse_surface_facts("error: unknown constant\n")
+        # What an older LeanClaims package prints, which lacks what these tools judge by.
+        older = 'info: surface-facts {"claims":[],"private_vocabulary":[],"surface":[],"vocabulary":[]}\n'
+        with self.assertRaisesRegex(TrustError, "has no hidden, replacements: the LeanClaims package this project requires is older"):
+            parse_surface_facts(older)
 
     def test_code_modules_default_to_the_code_library(self):
         with tempfile.TemporaryDirectory() as temporary:
