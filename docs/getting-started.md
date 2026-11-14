@@ -43,8 +43,9 @@ prints it.
 
 ## Running the checks on GitHub
 
-The project comes with `.github/workflows/ci.yml`. On every push it runs `claims verify`,
-and each night `claims verify --full`. It fetches the lean-claims tools at the commit the
+The project comes with `.github/workflows/ci.yml`. On a pull request and on a push to a
+branch it runs `claims verify`, and on a push to `main` it runs `claims verify --full`.
+It fetches the lean-claims tools at the commit the
 test package pins, so it needs the project to have been created with `--leanclaims-git`
 and `--leanclaims-rev`.
 

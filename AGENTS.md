@@ -54,7 +54,7 @@ been seen to fail on a fault planted for it.
 | `template/` | The starter project. `claims new` copies it under another name |
 | `selftest/` | Tests of the tools: unit tests, fixtures for the Lean commands, and runs that must fail |
 | `docs/` | The concepts, getting started, one page per check, and the reference for every file format |
-| `.github/workflows/ci.yml` | What GitHub runs on every push and each night |
+| `.github/workflows/ci.yml` | What GitHub runs on every push |
 
 ## Before a change is done
 

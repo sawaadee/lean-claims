@@ -45,7 +45,7 @@ files, the build, the theorem names, the axioms, the comparison of the proofs wi
 spec by independent kernels, the audit, the trust report, and the program. `--full` also
 plants every bug of `mutations.toml` and every fault, which takes a few minutes.
 
-`.github/workflows/ci.yml` runs `claims verify` on GitHub on every push, and
-`claims verify --full` each night.
+`.github/workflows/ci.yml` runs `claims verify` on GitHub on a pull request and on a push
+to a branch, and `claims verify --full` on a push to `main`.
 
 Lean v4.35.0 on Linux. `lake comparator` needs [bubblewrap](https://github.com/containers/bubblewrap).

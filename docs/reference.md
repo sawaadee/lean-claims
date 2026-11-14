@@ -27,7 +27,7 @@ Created: 2026-11-14
 | `faults.toml` | The project's own checks, and faults to plant so each is seen to fail | A person or an agent |
 | `TRUST.md` | Every public declaration and its level, the compiled replacements, the entries and the waivers | `claims trust` |
 | `AGENTS.md` | The rules and the order of work for adding a guarantee | From the starter |
-| `.github/workflows/ci.yml` | Runs `claims verify` on every push and `claims verify --full` each night | From the starter |
+| `.github/workflows/ci.yml` | Runs `claims verify` on a pull request and on a push to a branch, and `claims verify --full` on a push to `main` | From the starter |
 
 ## `Spec.lean`
 

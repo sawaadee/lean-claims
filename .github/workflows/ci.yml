@@ -1,13 +1,13 @@
 # File: .github/workflows/ci.yml
 # Purpose: Runs the checks of lean-claims on GitHub. On every push and pull request it
 # builds everything, runs the unit tests and the tests of the Lean commands, and runs
-# every check on the starter project and on MiniJson. On every push to main, each night,
-# and when started by hand, it runs the whole self-test, which also plants every bug and
-# every fault and builds two projects from scratch.
+# every check on the starter project and on MiniJson. On every push to main, and when
+# started by hand, it runs the whole self-test, which also plants every bug and every
+# fault and builds two projects from scratch.
 #
 # The split is by time: the first job takes a few minutes and the second about fifteen.
-# A branch or a pull request gets the quick answer. Nothing reaches main without the
-# whole self-test having run on it.
+# A branch or a pull request gets the quick answer. Every commit on main gets the whole
+# self-test.
 # Created: 2026-11-14
 
 name: checks
@@ -15,9 +15,6 @@ name: checks
 on:
   push:
   pull_request:
-  schedule:
-    # 03:17 UTC every day. Off the hour, when GitHub's scheduled runs are least delayed.
-    - cron: "17 3 * * *"
   workflow_dispatch:
 
 permissions:
@@ -72,7 +69,7 @@ jobs:
   whole-self-test:
     name: The whole self-test
     if: >-
-      github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' ||
+      github.event_name == 'workflow_dispatch' ||
       (github.event_name == 'push' && github.ref == 'refs/heads/main')
     runs-on: ubuntu-24.04
     timeout-minutes: 90

@@ -121,7 +121,7 @@ the two long runs to fail on catalogs made to fail them, creates a project from 
 and checks it, and adds a second claim to another while taking three wrong turns that
 the checks must stop.
 
-GitHub runs the same on every push to `main` and each night, and a shorter set of
+GitHub runs the same on every push to `main`, and a shorter set of
 checks on every other push and pull request. A project made with `claims new` carries a
 workflow of its own.
 

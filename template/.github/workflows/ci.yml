@@ -1,10 +1,10 @@
 # File: .github/workflows/ci.yml
-# Purpose: Runs this project's checks on GitHub. On every push and pull request it runs
-# `claims verify`: the lock, the generated files, the build, the theorem names, the
-# axioms, the comparison of the proofs with the spec by every kernel, the audit, the
-# trust report, and the project's own checks. Each night, and when started by hand, it
-# runs `claims verify --full`, which also plants every bug of `mutations.toml` and every
-# fault.
+# Purpose: Runs this project's checks on GitHub. On a pull request, and on a push to a
+# branch other than main, it runs `claims verify`: the lock, the generated files, the
+# build, the theorem names, the axioms, the comparison of the proofs with the spec by
+# every kernel, the audit, the trust report, and the project's own checks. On a push to
+# main, and when started by hand, it runs `claims verify --full`, which also plants every
+# bug of `mutations.toml` and every fault, so every commit on main gets the full run.
 #
 # The lean-claims tools are fetched at the commit the test package pins for the
 # LeanClaims package, so the tools and the package are always the same version. That
@@ -18,9 +18,6 @@ name: checks
 on:
   push:
   pull_request:
-  schedule:
-    # 03:17 UTC every day. Off the hour, when GitHub's scheduled runs are least delayed.
-    - cron: "17 3 * * *"
   workflow_dispatch:
 
 permissions:
@@ -71,9 +68,13 @@ jobs:
         run: lake build && (cd tests && lake build)
 
       - name: Every check
-        if: github.event_name == 'push' || github.event_name == 'pull_request'
+        if: >-
+          github.event_name == 'pull_request' ||
+          (github.event_name == 'push' && github.ref != 'refs/heads/main')
         run: python3 -I "$HOME/lean-claims/tools/claims.py" verify
 
       - name: Every check, every planted bug and every planted fault
-        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+        if: >-
+          github.event_name == 'workflow_dispatch' ||
+          (github.event_name == 'push' && github.ref == 'refs/heads/main')
         run: python3 -I "$HOME/lean-claims/tools/claims.py" verify --full
